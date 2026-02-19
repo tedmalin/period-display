@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>What Period Is It?</title>
+
+<style>
+:root{
+  --bg:#060b16;
+  --muted:#9aa6c7;
+  --warn:#ffd84d;
+  --blue:#7ec8ff;
+  --urgent:#ff8a3d;
+  --critical:#ff4d4d;
+}
+
+html, body{
+  margin:0;
+  width:100%;
+  height:100%;
+  background: var(--bg);
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  overflow:hidden;
+}
+
+body{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.wrap{
+  width:100%;
+  text-align:center;
+}
+
+.period{
+  font-weight: 950;
+  font-size: clamp(90px, 12vw, 180px);
+  line-height: 1.0;
+  letter-spacing: .5px;
+  color: var(--blue);
+  transition: opacity 400ms ease, transform 400ms ease, color 400ms ease;
+}
+
+.ends{
+  margin-top: 25px;
+  font-weight: 900;
+  font-size: clamp(60px, 8vw, 120px);
+  line-height: 1.05;
+  color: var(--warn);
+  transition: color 400ms ease, transform 400ms ease;
+}
+
+.seconds{
+  opacity:.45;
+}
+
+.time{
+  margin-top: 35px;
+  font-weight: 800;
+  font-size: clamp(32px, 3.5vw, 60px);
+  color: var(--muted);
+  letter-spacing:.5px;
+}
+
+.pulse{
+  animation: pulseAnim 1.2s ease-in-out infinite;
+}
+
+@keyframes pulseAnim{
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.035); }
+  100% { transform: scale(1); }
+}
+
+.fadeOut{
+  opacity:0;
+  transform: scale(.98);
+}
+</style>
+</head>
+
+<body>
+<div class="wrap">
+  <div id="period" class="period">Loading…</div>
+  <div id="ends" class="ends"></div>
+  <div id="time" class="time"></div>
+</div>
+
+<script>
+const SCHEDULE = [
+  { label: "HR",       start: "08:10", end: "08:17" },
+  { label: "Period 1", start: "08:18", end: "09:03" },
+  { label: "Period 2", start: "09:06", end: "09:51" },
+  { label: "Period 3", start: "09:54", end: "10:39" },
+  { label: "Period 4", start: "10:41", end: "11:26" },
+  { label: "Period 5", start: "11:28", end: "12:13" },
+  { label: "Period 6", start: "12:15", end: "13:00" },
+  { label: "Period 7", start: "13:02", end: "13:47" },
+  { label: "Period 8", start: "13:50", end: "14:35" },
+  { label: "Period 9", start: "14:40", end: "15:05" }
+];
+
+const TICK_MS = 1000;
+
+const elPeriod = document.getElementById("period");
+const elEnds = document.getElementById("ends");
+const elTime = document.getElementById("time");
+
+let lastLabel = "";
+
+function toMinutes(hhmm){
+  const [h,m] = hhmm.split(":").map(Number);
+  return h*60 + m;
+}
+
+/* ✅ Clock WITHOUT seconds */
+function formatClock(d){
+  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+function formatMinutes(seconds){
+  const mins = Math.ceil(seconds / 60);
+  return `${mins} minute${mins !== 1 ? "s" : ""}`;
+}
+
+function formatSeconds(seconds){
+  const s = Math.max(0, Math.floor(seconds));
+  const mm = Math.floor(s / 60);
+  const ss = s % 60;
+
+  return `${mm}:<span class="seconds">${String(ss).padStart(2,"0")}</span>`;
+}
+
+function findBlock(nowMins){
+  for (const b of SCHEDULE){
+    const s = toMinutes(b.start);
+    const e = toMinutes(b.end);
+    if (nowMins >= s && nowMins < e){
+      return { ...b, s, e };
+    }
+  }
+  return null;
+}
+
+function findNextBlock(nowMins){
+  for (const b of SCHEDULE){
+    if (toMinutes(b.start) > nowMins) return b;
+  }
+  return null;
+}
+
+function update(){
+  const now = new Date();
+  const nowMins = now.getHours()*60 + now.getMinutes() + now.getSeconds()/60;
+
+  elTime.textContent = `Current time: ${formatClock(now)}`;
+
+  const current = findBlock(nowMins);
+
+  if (current){
+
+    if (current.label !== lastLabel){
+      elPeriod.classList.add("fadeOut");
+      elEnds.classList.add("fadeOut");
+
+      setTimeout(()=>{
+        elPeriod.textContent = current.label;
+        elPeriod.classList.remove("fadeOut");
+        elEnds.classList.remove("fadeOut");
+      }, 200);
+    }
+
+    const secondsLeft = (current.e - nowMins) * 60;
+
+    /* ✅ Minutes-only display */
+    if (secondsLeft > 120){
+      elEnds.innerHTML = `Ends in ${formatMinutes(secondsLeft)}`;
+    }
+    else{
+      elEnds.innerHTML = `Ends in ${formatSeconds(secondsLeft)}`;
+    }
+
+    elEnds.classList.remove("pulse");
+
+    if (secondsLeft <= 60){
+      elEnds.style.color = getComputedStyle(document.documentElement).getPropertyValue('--critical');
+    }
+    else if (secondsLeft <= 120){
+      elEnds.style.color = getComputedStyle(document.documentElement).getPropertyValue('--urgent');
+    }
+    else{
+      elEnds.style.color = getComputedStyle(document.documentElement).getPropertyValue('--warn');
+    }
+
+    if (secondsLeft <= 30){
+      elEnds.classList.add("pulse");
+    }
+
+    lastLabel = current.label;
+    return;
+  }
+
+  const firstStart = toMinutes(SCHEDULE[0].start);
+  const lastEnd = toMinutes(SCHEDULE.at(-1).end);
+
+  if (nowMins < firstStart){
+    const next = SCHEDULE[0];
+    elPeriod.textContent = "Before School";
+    elEnds.innerHTML = `${next.label} starts in ${formatMinutes((toMinutes(next.start)-nowMins)*60)}`;
+    return;
+  }
+
+  if (nowMins >= lastEnd){
+    elPeriod.textContent = "After School";
+    elEnds.textContent = "";
+    return;
+  }
+
+  const next = findNextBlock(nowMins);
+
+  if (next){
+    const secondsToNext = (toMinutes(next.start) - nowMins) * 60;
+
+    elPeriod.textContent = "Passing Time";
+
+    if (secondsToNext > 120){
+      elEnds.innerHTML = `${next.label} starts in ${formatMinutes(secondsToNext)}`;
+    }
+    else{
+      elEnds.innerHTML = `${next.label} starts in ${formatSeconds(secondsToNext)}`;
+    }
+
+    elEnds.style.color = getComputedStyle(document.documentElement).getPropertyValue('--blue');
+  }
+}
+
+update();
+setInterval(update, TICK_MS);
+</script>
+</body>
+</html>
